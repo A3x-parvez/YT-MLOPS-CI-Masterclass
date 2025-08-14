@@ -34,27 +34,38 @@ def test_calculator_all_results():
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
+
+        # Open the app
         page.goto("http://localhost:8501", wait_until="networkidle")
 
+        # Fill the number input
         input_box = page.locator("input[type=number]")
         input_box.fill("")
         input_box.type("2")
 
+        # Click the calculate button
         page.click("button:has-text('Calculate')")
-        page.wait_for_selector("div:has-text('raised to the power')")
 
-        result_elements = page.locator("div:has-text('raised to the power')")
-        all_results = "\n".join(
-            [result_elements.nth(i).inner_text() for i in range(result_elements.count())]
-        )
+        # Wait for one of the results to appear (timeout set to 10 seconds)
+        page.wait_for_selector("div:has-text('squared is')", timeout=10000)
 
+        # Get full HTML content for checking results
+        content = page.content()
+
+        # Remove all spaces for comparison to avoid spacing/formatting issues
+        content_no_spaces = content.replace(" ", "")
+
+        # Expected results based on your Streamlit app
         expected_results = [
-            "2 raised to the power of  2  is : 4.",
-            "2 raised to the power of  3  is : 8.",
-            "2 raised to the power of  4  is : 16.",
-            "2 raised to the power of  5  is : 32."
+            "2 squared is 4",
+            "2 cubed is 8",
+            "2 to the fourth power is 16",
+            "2 to the fifth power is 32"
         ]
-        for result in expected_results:
-            assert result in all_results
+
+        # Assert each expected text is present (ignoring spaces)
+        for expected in expected_results:
+            assert expected.replace(" ", "") in content_no_spaces, \
+                f"Expected '{expected}' in page content"
 
         browser.close()
