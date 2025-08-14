@@ -1,17 +1,32 @@
 import subprocess
 import time
+import socket
 import pytest
 from playwright.sync_api import sync_playwright
 
+def wait_for_port(host, port, timeout=30):
+    start_time = time.time()
+    while True:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                return True
+        except OSError:
+            time.sleep(0.5)
+        if time.time() - start_time > timeout:
+            raise TimeoutError(f"Port {port} not available after {timeout} seconds")
+
 @pytest.fixture(scope="session", autouse=True)
 def run_streamlit():
-    # Start the app in the background
     process = subprocess.Popen(
-        ["streamlit", "run", "app.py", "--server.headless", "true"],
+        [
+            "streamlit", "run", "app.py",
+            "--server.headless", "true",
+            "--server.port", "8501"
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    time.sleep(3)  # wait for server to start
+    wait_for_port("localhost", 8501, timeout=60)  # Wait until server is ready
     yield
     process.terminate()
 
@@ -19,19 +34,19 @@ def test_calculator_all_results():
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
-        page.goto("http://localhost:8501")
+        page.goto("http://localhost:8501", wait_until="networkidle")
 
-        # Set number input to 2 (clear first to avoid appending)
         input_box = page.locator("input[type=number]")
-        input_box.fill("")  # clear
+        input_box.fill("")
         input_box.type("2")
 
-        # Click "Calculate"
         page.click("button:has-text('Calculate')")
-
-        # Grab all the text from the results container
         page.wait_for_selector("div:has-text('raised to the power')")
-        content = page.inner_text("div:has-text('raised to the power')")
+
+        result_elements = page.locator("div:has-text('raised to the power')")
+        all_results = "\n".join(
+            [result_elements.nth(i).inner_text() for i in range(result_elements.count())]
+        )
 
         expected_results = [
             "2 raised to the power of  2  is : 4.",
@@ -40,6 +55,6 @@ def test_calculator_all_results():
             "2 raised to the power of  5  is : 32."
         ]
         for result in expected_results:
-            assert result in content
+            assert result in all_results
 
         browser.close()
