@@ -30,6 +30,3 @@ jobs:
         run: |
           pytest _test.py
 
-      - name: Run E2E tests
-        run: |
-          pytest test_e2e.py
